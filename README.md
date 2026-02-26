@@ -4,7 +4,7 @@
 
 [![Thesis](https://img.shields.io/badge/Thesis-SKKU%202024-blue)](https://dcollection.skku.edu/srch/srchDetail/000000181091?localeParam=en)
 [![ICCAS 2024](https://img.shields.io/badge/Paper-ICCAS%202024-green)](https://ieeexplore.ieee.org/document/10773068)
-[![Framework](https://img.shields.io/badge/Design%20Foundation-monolithic--robotics-orange)](../monolithic-robotics)
+[![Framework](https://img.shields.io/badge/Design%20Foundation-monolithic--robotics-orange)](https://github.com/gigalgi/monolithic-robotics)
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
 ![License: CC BY 4.0](https://img.shields.io/badge/CAD%20Files-CC%20BY%204.0-lightgrey.svg)
 
