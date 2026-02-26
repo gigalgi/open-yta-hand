@@ -21,6 +21,6 @@
 
 ## What This Is
 
-Open-Yta-Hand is the full implementation of the [Monolithic Robotics](../monolithic-robotics) hand framework: every mechanical component, all control software, and the complete sensing stack — from a single 3D-printed finger to an assembled hand with wrist.
+Open-Yta-Hand is the full implementation of the [Monolithic Robotics](https://github.com/gigalgi/monolithic-robotics) hand framework: every mechanical component, all control software, and the complete sensing stack — from a single 3D-printed finger to an assembled hand with wrist.
 
-The hand features four underactuated fingers and an opposable thumb, each built from the UMoBIC joint — a FACT-derived compliant revolute unit described in detail in the [monolithic-robotics](../monolithic-robotics) repository. This repository contains everything needed to build, assemble, and run a working prototype: CAD files, firmware, kinematics, simulation, and control code.
+The hand features four underactuated fingers and an opposable thumb, each built from the UMoBIC joint — a FACT-derived compliant revolute unit described in detail in the [monolithic-robotics](https://github.com/gigalgi/monolithic-robotics) repository. This repository contains everything needed to build, assemble, and run a working prototype: CAD files, firmware, kinematics, simulation, and control code.
