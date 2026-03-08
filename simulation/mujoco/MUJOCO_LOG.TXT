@@ -1,0 +1,6 @@
+Tue Mar  3 22:32:01 2026
+WARNING: mju_openResource: unknown file 'objects/pen.xml'
+
+Tue Mar  3 22:33:12 2026
+WARNING: mju_openResource: unknown file 'objects/pen.xml'
+

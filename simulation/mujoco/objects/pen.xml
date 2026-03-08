@@ -1,0 +1,79 @@
+<!--
+  objects/pen.xml
+  ═══════════════════════════════════════════════════════════════════
+  Pen object for UMoBIC-Finger grasping simulation.
+
+  Dimensions match grasp_point_generator.py exactly:
+    radius  = 6 mm   — from circle_tray.npy (pen cross-section)
+    length  = 160 mm — realistic ballpoint pen (80 mm half-height)
+    center  = (0.023, -0.035, 0.100) m — ANCHOR_X0/Y0 from
+              grasp_point_generator.py converted to meters
+
+  Two bodies:
+    pen           — the physical cylinder with freejoint (movable)
+    target_marker — red sphere showing the exact grasp contact point
+                    output of grasp_point_generator.py
+
+  To swap objects:
+    Replace this file with bottle.xml, screwdriver.xml, etc.
+    Keep the same body names (pen, target_marker) and the main
+    mjmodel.xml needs no changes at all.
+
+  To lock pen in place (fixed training target):
+    Remove the <freejoint> line — pen becomes a static obstacle.
+  ═══════════════════════════════════════════════════════════════════
+-->
+<mujocoinclude>
+
+  <!--
+  ── PEN ──────────────────────────────────────────────────────────────
+  freejoint → pen responds to finger contact (can be pushed, rolls, falls).
+  mass=0.006 kg (6 g — real ballpoint pen weight).
+  friction=0.8 → rubber-grip surface approximation.
+  contype=1 conaffinity=1 → collides with the capsule geoms on the finger.
+  ─────────────────────────────────────────────────────────────────────
+  -->
+  <body name="pen" pos="0 -0.04 0.10" euler="1.5708 1.5708 0">
+
+    <!-- Remove this line to lock pen in place for fixed-target training -->
+    <!-- <freejoint name="pen_free"/> -->
+
+    <inertial pos="0 0 0"
+              mass="0.006"
+              diaginertia="1e-6 1e-6 4e-8"/>
+
+    <!-- Main body — blue cylinder, 6mm radius, 160mm total length -->
+    <geom name="pen_geom"
+          type="cylinder"
+          size="0.006 0.080"
+          rgba="0.15 0.25 0.80 1.0"
+          contype="1" conaffinity="1"
+          friction="0.8 0.005 0.0001"/>
+
+    <!-- Black cap ring at top — visual orientation reference only -->
+    <geom type="cylinder"
+          pos="0 0 0.072"
+          size="0.0062 0.006"
+          rgba="0.1 0.1 0.1 1.0"
+          contype="0" conaffinity="0"/>
+
+  </body>
+
+  <!--
+  ── GRASP TARGET MARKER ──────────────────────────────────────────────
+  Red sphere = exact contact point output of grasp_point_generator.py.
+  Position   = left surface of pen = pen_center_x - pen_radius
+             = (0.023 - 0.006, -0.035, 0.100) = around (0.017, -0.035, 0.100) but fine-tuned manually
+             0.1 with the origin in the floor 0.02 with origin in coordinate frame of the grasping_point_generator.py
+  Purely visual — contype=0 conaffinity=0, no physics interaction. 
+  ─────────────────────────────────────────────────────────────────────
+  -->
+  <body name="target_marker" pos="0.0 -0.045 0.100">
+    <geom name="target_geom"
+          type="sphere"
+          size="0.003"
+          rgba="1.0 0.15 0.15 0.9"
+          contype="0" conaffinity="0"/>
+  </body>
+
+</mujocoinclude>

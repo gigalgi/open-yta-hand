@@ -1,0 +1,1 @@
+controller_joint_names: ['', 'joint_servo', 'joint_motor', 'joint0_abd', 'joint1_prx', 'joint2_prx', 'joint3_int', 'joint4_int', 'joint5_int', 'joint6_dis', ]

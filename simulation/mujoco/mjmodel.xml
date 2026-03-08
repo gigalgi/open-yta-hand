@@ -1,0 +1,484 @@
+<!--
+╔══════════════════════════════════════════════════════════════════╗
+║  UMoBIC-Finger  —  MuJoCo Simulation Model                       ║
+║  model name: finger_mujoco                                       ║
+║                                                                  ║
+║                 IMPORTANT KINEMATIC LIMITATION                   ║
+║              ════════════════════════════════════════            ║
+║   The real UMoBIC-Finger uses COMPLIANT ROLLING-CONTACT joints,  ║
+║   two circular surfaces rolling against each other without       ║
+║   slipping with flexure blades in the center simulating rotation ║
+║   motion. This creates a non-standard kinematic constraint that  ║
+║   CANNOT be represented.                                         ║
+║                                                                  ║
+║  Units:   SI  (meters · kilograms · seconds · radians)          ║
+║  Origin:  palm base, aligned with real hardware mounting frame   ║
+║                                                                  ║
+║  Parameter sources used throughout this file:                    ║
+║    [CAD]   SolidWorks assembly export (PETG density 1.27 g/cm³) ║
+║    [EQ]    Forward kinematics equations, thesis Ch.4 §4.1.1     ║
+║    [HW]    Measured on real prototype                            ║
+║    [TUNED] Manual calibration vs. real motion-capture data       ║
+║                                                                  ║
+║  DOF summary (9 joints, 2 actuators):                           ║
+║    joint_servo  — abduction servo pulley    (MG90S)             ║
+║    joint_motor  — main flexion cable pulley (JA12-N20 1:150)    ║
+║    joint0_abd   — MCP abduction/adduction   ← servo driven      ║
+║    joint1_prx   — proximal flexion #1        \                  ║
+║    joint2_prx   — proximal flexion #2         |  all passive,   ║
+║    joint3_int   — intermediate flexion #1     |  coupled to     ║
+║    joint4_int   — intermediate flexion #2     |  joint_motor    ║
+║    joint5_int   — intermediate flexion #3     |  via tendon     ║
+║    joint6_dis   — distal (DIP) flexion       /   constraints    ║
+║                                                                  ║
+║  Reference:                                                      ║
+║    Galvis Giraldo, G. — Master's Thesis, SKKU 2024, Ch. 3–5      ║
+╚══════════════════════════════════════════════════════════════════╝
+-->
+<mujoco model="finger_mujoco">
+
+  <!--
+  ══════════════════════════════════════════════════════════════════
+  COMPILER
+    angle="radian"   All joint values in radians — required for the
+                     tendon coef equations to be dimensionally correct
+                     (thesis Eq. 4.4-4.6 use radians throughout).
+                     Changing to "degree" would break all coef values.
+    meshdir          STL files exported from SolidWorks with
+                     coordinate frames preserved, so all pos/quat
+                     values below are consistent with the CAD origin.
+  ══════════════════════════════════════════════════════════════════
+  -->
+  <compiler angle="radian" meshdir="meshes/" texturedir="texture/"/>
+
+  <!--
+  ══════════════════════════════════════════════════════════════════
+  SIMULATION OPTIONS
+    timestep="0.002"    2 ms step (500 Hz integration).
+                        [TUNED] Minimum stable timestep for the 7
+                        stiff tendon equality constraints.  Values
+                        above 0.005 cause constraint violations.
+                        Higher than the real controller rate (100 Hz)
+                        to integrate tendon dynamics accurately.
+
+    iterations="100"    Constraint solver iterations.
+                        [TUNED] Doubled from MuJoCo default (50)
+                        because 7 simultaneous equality constraints
+                        on the coupled tendon system require more
+                        iterations to converge each physics step.
+
+    apirate="50"        External control API rate at 50 Hz.
+                        Matches the Python RL policy loop rate and
+                        the real impedance controller loop rate.
+  ══════════════════════════════════════════════════════════════════
+  -->
+  <option timestep="0.002" iterations="100" apirate="50"/>
+
+  <!--
+  ══════════════════════════════════════════════════════════════════
+  MEMORY SIZES
+    njmax="600"       Max constraint rows — budget for 7 tendon
+                      equalities plus object contact constraints
+                      during grasping experiments.
+    nconmax="150"     Max simultaneous contact pairs for grasping.
+    nstack="300000"   Solver stack — increased from default because
+                      the coupled tendon system requires extra
+                      temporary storage during constraint resolution.
+  ══════════════════════════════════════════════════════════════════
+  -->
+  <size njmax="600" nconmax="150" nstack="300000"/>
+
+  <!--
+  ══════════════════════════════════════════════════════════════════
+  DEFAULTS  (applied to all joints/actuators unless overridden)
+
+    damping="1"         Viscous joint damping [N·m·s/rad].
+                        [TUNED] Calibrated by comparing simulated
+                        free-swing decay to real motion-capture data.
+                        Too low → oscillation absent in real hardware.
+                        Too high → finger feels sluggish vs. real.
+
+    frictionloss="0.01" Coulomb joint friction [N·m].
+                        [TUNED] Estimated from static friction of the
+                        3D-printed rolling-contact joints. Prevents
+                        the sim finger drifting when unactuated,
+                        matching real passive behaviour.
+
+    armature=".01"      Reflected rotor inertia [kg·m²].
+                        [TUNED] Models inertia of cable + pulley +
+                        gearing. Without it sim joints respond faster
+                        than real ones (missing drivetrain inertia).
+
+    kp="1"              Default position gain — overridden to kp=500
+                        on both real actuators below.
+  ══════════════════════════════════════════════════════════════════
+  -->
+  <default>
+    <joint limited="true" damping="1" frictionloss="0.01" armature=".01"/>
+    <position ctrllimited="true" kp="1"/>
+  </default>
+
+  <!-- STL meshes exported from SolidWorks with frames preserved [CAD] -->
+  <asset>
+    <mesh name="palm_link"          file="palm_link.STL"/>
+    <mesh name="servo_pulley_link"  file="servo_pulley_link.STL"/>
+    <mesh name="motor_pulley_link"  file="motor_pulley_link.STL"/>
+    <mesh name="phalanx1_link1_abd" file="phalanx1_link1_abd.STL"/>
+    <mesh name="phalanx_link1_prx"  file="phalanx_link1_prx.STL"/>
+    <mesh name="phalanx1_link2_prx" file="phalanx1_link2_prx.STL"/>
+    <mesh name="phalanx_link1_int"  file="phalanx_link1_int.STL"/>
+    <mesh name="phalanx_link2_int"  file="phalanx_link2_int.STL"/>
+    <mesh name="phalanx_link3_int"  file="phalanx_link3_int.STL"/>
+    <mesh name="phalanx_link1_dis"  file="phalanx_link1_dis.STL"/>
+    <texture name="grid" type="2d" builtin="checker"
+             rgb1=".1 .2 .3" rgb2=".2 .3 .4" width="300" height="300"/>
+    <material name="grid" texture="grid" texrepeat="8 8" reflectance=".2"/>
+  </asset>
+
+  <worldbody>
+    <geom size=".2 .2 .01" type="plane" material="grid"/>
+    <light pos="0 0 .6"/>
+    <camera name="closeup" pos="0 -.1 .07" xyaxes="1 0 0 0 1 2"/>
+
+    <!-- PALM — fixed base, no joint. Participates in collision by default. -->
+    <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="palm_link" contype="1" conaffinity="1"/>
+
+    <!--
+    ── SERVO PULLEY ────────────────────────────────────────────────
+    Drives abduction (joint0_abd) via T_abd_servo tendon.
+    Hardware: MG90S micro servo on the palm.
+    pos/quat: [CAD] places pulley at MCP abduction axis.
+    mass 0.00064912 kg, inertia: [CAD] SolidWorks.
+    joint_servo range ±1 rad: [HW] physical MG90S horn travel limit.
+    contype/conaffinity=0: internal pulley, excluded from collision.
+    ────────────────────────────────────────────────────────────────
+    -->
+    <body name="servo_pulley_link"
+          pos="0.00010005 -0.0199 0.038"
+          quat="0.692275 0.692277 0.144062 0.144061">
+      <inertial pos="0 0.0033461 0"
+                quat="0.663108 -0.245537 -0.245537 0.663108"
+                mass="0.00064912"
+                diaginertia="1.7526e-08 1.17082e-08 1.12928e-08"/>
+      <joint name="joint_servo" type="hinge" pos="0 0 0"
+             axis="0 1 0" range="-1 1"/>
+      <geom type="mesh" rgba="1 1 1 1" mesh="servo_pulley_link"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <!--
+    ── MOTOR PULLEY ────────────────────────────────────────────────
+    Main cable pulley driving all 6 flexion joints via tendon equalities.
+    Hardware: JA12-N20 micro motor, 1:150 gearbox + 2:1 bevel gear.
+    pos/quat: [CAD] cable axis alignment at finger base, 57.5 mm height.
+    mass 0.0053624 kg (heavier — includes bevel gear body): [CAD].
+    joint_motor range ±3.14 rad: [HW] full motor rotation before
+      cable over-winding. Lower bound -0.3 in actuator ctrlrange
+      prevents over-unwinding.
+    contype/conaffinity=0: internal mechanism, excluded from collision.
+    ────────────────────────────────────────────────────────────────
+    -->
+    <body name="motor_pulley_link"
+          pos="0 -0.0065 0.0575"
+          quat="-3.67314e-06 0.999981 -2.2658e-08 -0.00616846">
+      <inertial pos="-0.00028931 0.0095592 -0.00028355"
+                quat="0.577387 0.126641 0.408197 0.695674"
+                mass="0.0053624"
+                diaginertia="2.60047e-07 2.57854e-07 2.16879e-07"/>
+      <joint name="joint_motor" type="hinge" pos="0 0 0"
+             axis="0 1 0" range="-3.14 3.14"/>
+      <geom type="mesh" rgba="1 1 1 1" mesh="motor_pulley_link"
+            contype="0" conaffinity="0"/>
+    </body>
+
+    <!--
+    ── FINGER KINEMATIC CHAIN ──────────────────────────────────────
+    All pos/quat:        [CAD] SolidWorks assembly export.
+    All mass/COM/inertia:[CAD] SolidWorks, PETG density 1.27 g/cm³.
+    All joint ranges:    [HW] ±0.7 rad (±40°) — measured physical
+                         limit on the printed prototype. Matches
+                         max_angle_deg=40 in finger_simulator.py.
+    contype/conaffinity=0 on all links: exclude self-collision.
+      For grasping experiments set conaffinity="1" on the object body.
+    Joints 1–6 are PASSIVE — driven only by joint_motor tendons below.
+    ────────────────────────────────────────────────────────────────
+    -->
+
+    <!-- MCP ABDUCTION LINK — servo-driven, 107 mm above palm [CAD] -->
+    <body name="phalanx1_link1_abd"
+          pos="0.00025 -0.0054079 0.10695"
+          quat="1.34924e-11 -3.67321e-06 1 -3.67321e-06">
+      <inertial pos="-5.9722e-05 -0.0084809 -0.0081966"
+                quat="0.0381308 0.680879 -0.0123433 0.731298"
+                mass="0.0025141"
+                diaginertia="9.34887e-08 6.5377e-08 5.99283e-08"/>
+      <!-- joint0_abd: only independent DOF besides joint_motor.
+           Driven by joint_servo. Range ±0.7 rad = servo horn travel. -->
+      <joint name="joint0_abd" type="hinge" pos="0 0 0"
+             axis="0 1 0" range="-0.7 0.7"/>
+      <geom type="mesh" rgba="1 1 1 1" mesh="phalanx1_link1_abd"
+            contype="0" conaffinity="0"/>
+
+      <!-- PROXIMAL PHALANX BODY 1
+           pos: [CAD] PIP axis offset from MCP, derived from rolling
+                contact geometry (thesis Ch. 3, Eq. 3.1).
+           quat: [CAD] aligns frame with rolling-contact joint axis. -->
+      <body name="phalanx_link1_prx"
+            pos="0 -0.0085921 -0.01705"
+            quat="0.707105 0 0 0.707108">
+        <inertial pos="0.0031611 0.00033176 -0.0057507"
+                  quat="0.00309698 0.713211 -0.0011813 0.700942"
+                  mass="0.0059145"
+                  diaginertia="5.00815e-07 3.7855e-07 3.54575e-07"/>
+        <!-- joint1_prx: passive, 4.5:1 coupled to joint_motor [EQ].
+             r_pulley/r_rolling = 0.008/0.036 = 4.5:1 reduction. -->
+        <joint name="joint1_prx" type="hinge" pos="0 0 0"
+               axis="0 1 0" range="-0.7 0.7"/>
+        <geom type="mesh" rgba="1 1 1 1" mesh="phalanx_link1_prx"
+              contype="0" conaffinity="0"/>
+
+        <!-- PROXIMAL PHALANX BODY 2 (rolling-contact pair second body)
+             pos=0.0114 m: [CAD] 11.4 mm rolling-circle pitch. -->
+        <body name="phalanx1_link2_prx" pos="0 0 -0.0114">
+          <inertial pos="0.00029466 0.00025493 -0.0078726"
+                    quat="0.513386 0.492274 -0.481524 0.51209"
+                    mass="0.002014"
+                    diaginertia="5.96415e-08 4.83638e-08 3.38077e-08"/>
+          <!-- joint2_prx: passive, same 4.5:1 ratio [EQ].
+               Rolling pair distributes bending to reduce peak stress. -->
+          <joint name="joint2_prx" type="hinge" pos="0 0 0"
+                 axis="0 1 0" range="-0.7 0.7"/>
+          <geom type="mesh" rgba="1 1 1 1" mesh="phalanx1_link2_prx"
+                contype="0" conaffinity="0"/>
+
+          <!-- INTERMEDIATE PHALANX BODY 1 (PIP segment)
+               pos=0.01555 m: [CAD] proximal-to-intermediate spacing. -->
+          <body name="phalanx_link1_int" pos="0 0 -0.01555">
+            <inertial pos="0.00043592 0.00033932 -0.005629"
+                      quat="0.466195 0.554663 -0.433837 0.535534"
+                      mass="0.0015511"
+                      diaginertia="5.62669e-08 4.15694e-08 3.61687e-08"/>
+            <!-- joint3_int: passive, same 4.5:1 ratio [EQ]. -->
+            <joint name="joint3_int" type="hinge" pos="0 0 0"
+                   axis="0 1 0" range="-0.7 0.7"/>
+            <geom type="mesh" rgba="1 1 1 1" mesh="phalanx_link1_int"
+                  contype="0" conaffinity="0"/>
+
+            <!-- INTERMEDIATE PHALANX BODY 2
+                 pos=0.0114 m: [CAD] same pitch as proximal section. -->
+            <body name="phalanx_link2_int" pos="0 0 -0.0114">
+              <inertial pos="0.0033404 0.00030416 -0.0057723"
+                        quat="-0.0167526 0.710991 0.020592 0.7027"
+                        mass="0.0057585"
+                        diaginertia="4.89393e-07 3.70905e-07 3.49772e-07"/>
+              <!-- joint4_int: passive, same 4.5:1 ratio [EQ]. -->
+              <joint name="joint4_int" type="hinge" pos="0 0 0"
+                     axis="0 1 0" range="-0.7 0.7"/>
+              <geom type="mesh" rgba="1 1 1 1" mesh="phalanx_link2_int"
+                    contype="0" conaffinity="0"/>
+
+              <!-- INTERMEDIATE PHALANX BODY 3  (cam-follower differential)
+                   quat="-3.67321e-06 1 0 0": [CAD] 180° flip required
+                   because the cam-follower mechanism physically reverses
+                   rotation direction here (thesis Ch. 3, §3.4). The quat
+                   corrects the mesh orientation; the axis flip on joint5
+                   handles the kinematic direction reversal. -->
+              <body name="phalanx_link3_int"
+                    pos="0 0 -0.0114"
+                    quat="-3.67321e-06 1 0 0">
+                <inertial pos="9.7987e-05 -0.00025512 0.0076047"
+                          quat="0.525574 0.497518 -0.479196 0.496607"
+                          mass="0.0019386"
+                          diaginertia="6.11345e-08 4.73321e-08 3.33433e-08"/>
+                <!-- joint5_int: passive, 4.5:1 ratio [EQ].
+                     axis="0 -1 0": FLIPPED vs. all other joints [CAD+EQ].
+                     Models the cam-follower direction reversal at this
+                     segment (thesis Ch. 3, §3.4). Coef in T_map_j5 stays
+                     positive because axis direction handles the sign. -->
+                <joint name="joint5_int" type="hinge" pos="0 0 0"
+                       axis="0 -1 0" range="-0.7 0.7"/>
+                <geom type="mesh" rgba="1 1 1 1" mesh="phalanx_link3_int"
+                      contype="0" conaffinity="0"/>
+
+                <!-- DISTAL PHALANX (DIP / fingertip)
+                     pos=0.0149 m: [CAD] 14.9 mm — slightly longer than
+                     intermediate links, measured on prototype.
+                     quat: [CAD] restores forward orientation after the
+                     cam-follower body flip above. -->
+                <body name="phalanx_link1_dis"
+                      pos="0 0 0.0149"
+                      quat="-3.67321e-06 1 0 0">
+                  <inertial pos="-0.00010858 0.00025287 -0.0094074"
+                            quat="0.711685 0.0099199 0.0104214 0.702351"
+                            mass="0.0023104"
+                            diaginertia="9.94276e-08 9.5898e-08 7.69994e-08"/>
+                  <!-- joint6_dis: passive, 1.875:1 ratio [EQ+TUNED].
+                       coef=0.015 (vs. 0.036 for all other joints).
+                       Smaller distal pulley by design — the cam-follower
+                       differential reduces DIP coupling to allow adaptive
+                       fingertip wrapping (thesis Ch. 3, §3.4).
+                       Value was manually tuned against real DIP motion. -->
+                  <joint name="joint6_dis" type="hinge" pos="0 0 0"
+                         axis="0 1 0" range="-0.7 0.7"/>
+                  <geom type="mesh" rgba="1 1 1 1" mesh="phalanx_link1_dis"
+                        contype="1" conaffinity="1"/>
+
+                  <geom name="cap_dis" type="capsule" pos="0 0 -0.006"
+                        size="0.009 0.005" rgba="1.0 0.4 0.1 0.3"
+                        contype="1" conaffinity="1" friction="0.9 0.005 0.0001"/>
+                  
+                  <site name="fingertip"
+                        pos="-0.0075 0 -0.01"
+                        size="0.002" rgba="1.0 0.15 0.15 0.9"/>
+
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         OBJECT INCLUDE
+         Swap this one line to change the grasping object.
+         All object files live in objects/ and follow the same
+         body name convention so nothing else needs to change.
+    ═══════════════════════════════════════════════════════════════ --> 
+    <!-- <include file="objects/pen.xml"/> -->
+
+  </worldbody>
+
+
+  <!--
+  ════════════════════════════════════════════════════════════════════
+  TENDONS — cable transmission model
+  [EQ] Derived from thesis Ch. 4, Eq. 4.4–4.6:
+
+       phi_i  =  (r_pulley / r_rolling_i) * theta_motor
+
+  In MuJoCo fixed tendon syntax:
+       coef(joint_i)  = +r_rolling_i    →  0.036 m  (joints 1–5)
+                                         →  0.015 m  (joint 6, distal)
+       coef(motor)    = -r_pulley       → -0.008 m  (motor spool radius)
+
+  Enforced constraint:  r_rolling * phi_i  -  r_pulley * theta_motor = 0
+  Coupling ratios:
+       Joints 1–5:   0.036 / 0.008 = 4.5 : 1
+       Joint 6:      0.015 / 0.008 = 1.875 : 1  (softer distal by design)
+  ════════════════════════════════════════════════════════════════════
+  -->
+  <tendon>
+
+    <!-- joint1_prx ↔ joint_motor [EQ] 4.5:1, proximal rolling-contact #1 -->
+    <fixed name="T_map_j1" range="-1 1">
+      <joint joint="joint1_prx"  coef="0.036"/>
+      <joint joint="joint_motor" coef="-0.008"/>
+    </fixed>
+
+    <!-- joint2_prx ↔ joint_motor [EQ] 4.5:1, proximal rolling-contact #2 -->
+    <fixed name="T_map_j2" range="-1 1">
+      <joint joint="joint2_prx"  coef="0.036"/>
+      <joint joint="joint_motor" coef="-0.008"/>
+    </fixed>
+
+    <!-- joint3_int ↔ joint_motor [EQ] 4.5:1, intermediate #1 -->
+    <fixed name="T_map_j3" range="-1 1">
+      <joint joint="joint3_int"  coef="0.036"/>
+      <joint joint="joint_motor" coef="-0.008"/>
+    </fixed>
+
+    <!-- joint4_int ↔ joint_motor [EQ] 4.5:1, intermediate #2 -->
+    <fixed name="T_map_j4" range="-1 1">
+      <joint joint="joint4_int"  coef="0.036"/>
+      <joint joint="joint_motor" coef="-0.008"/>
+    </fixed>
+
+    <!-- joint5_int ↔ joint_motor [EQ] 4.5:1, intermediate #3.
+         joint5_int axis is flipped (-Y) so positive coef still gives
+         correct flexion direction through the cam-follower reversal. -->
+    <fixed name="T_map_j5" range="-1 1">
+      <joint joint="joint5_int"  coef="0.036"/>
+      <joint joint="joint_motor" coef="-0.008"/>
+    </fixed>
+
+    <!-- joint6_dis ↔ joint_motor [EQ+TUNED] 1.875:1, distal.
+         coef=0.015 — smaller distal pulley deliberately reduces DIP
+         coupling for adaptive fingertip wrapping (thesis Ch. 3, §3.4).
+         Manually tuned to match real distal joint motion. -->
+    <fixed name="T_map_j6" range="-1 1">
+      <joint joint="joint6_dis"  coef="0.015"/>
+      <joint joint="joint_motor" coef="-0.008"/>
+    </fixed>
+
+    <!-- joint0_abd ↔ joint_servo [HW+TUNED]
+         coef 0.98:1 ≈ direct coupling (slight mechanical advantage).
+         [TUNED] Value matched to observed real servo-to-joint motion arc.
+         range="0 1": abduction is unidirectional — spring return on real HW,
+         servo drives opening only. -->
+    <fixed name="T_abd_servo" range="0 1">
+      <joint joint="joint_servo" coef="-1"/>
+      <joint joint="joint0_abd"  coef="0.98"/>
+    </fixed>
+
+  </tendon>
+
+
+  <!--
+  ════════════════════════════════════════════════════════════════════
+  EQUALITY CONSTRAINTS
+  Makes each tendon a rigid kinematic equality (inextensible cable).
+  Without these the phalanx joints are passive and uncoupled.
+  With them, commanding joint_motor moves all 6 flexion joints
+  simultaneously — replicating the real underactuated behaviour.
+  This is the core sim-to-real mechanism for this design.
+  ════════════════════════════════════════════════════════════════════
+  -->
+  <equality>
+    <tendon name="E_map_j1"    tendon1="T_map_j1"/>
+    <tendon name="E_map_j2"    tendon1="T_map_j2"/>
+    <tendon name="E_map_j3"    tendon1="T_map_j3"/>
+    <tendon name="E_map_j4"    tendon1="T_map_j4"/>
+    <tendon name="E_map_j5"    tendon1="T_map_j5"/>
+    <tendon name="E_map_j6"    tendon1="T_map_j6"/>
+    <tendon name="E_abd_servo" tendon1="T_abd_servo"/>
+  </equality>
+
+
+  <!--
+  ════════════════════════════════════════════════════════════════════
+  ACTUATORS — 2 only, matching real hardware exactly.
+  The RL policy commands these two values. All other joint motions
+  are consequences of the tendon equality constraints above.
+
+  joint_m_pos — main flexion motor  (JA12-N20 + 1:150 + 2:1 bevel)
+    ctrlrange="-0.3 3.14":
+      [HW] Lower -0.3 rad: slight reverse to release cable tension.
+           Upper 3.14 rad (180°): max safe pulley rotation before
+           cable over-winding on the real spool.
+    kp=500: [TUNED] Position gain matching the motor's closed-loop
+      stiffness at 6V. Validated against impedance control step-
+      response data (thesis Ch. 5, §5.1.2).
+
+  joint_s_pos — abduction servo  (MG90S)
+    ctrlrange="-0.3 0.3":
+      [HW] ±0.3 rad (±17°) total range — measured from physical
+           horn travel at this mounting geometry on the prototype.
+    kp=500: [TUNED] Same bandwidth as motor for consistent response.
+  ════════════════════════════════════════════════════════════════════
+  -->
+  <actuator>
+    <!-- Abduction servo — controls lateral finger spread -->
+    <position name="joint_s_pos"
+              joint="joint_servo"
+              ctrlrange="-0.3 0.3"
+              kp="400"/>
+
+    <!-- Main flexion motor — drives all 6 phalanx joints via cable tendons -->
+    <position name="joint_m_pos"
+              joint="joint_motor"
+              ctrlrange="-0.3 3.14"
+              kp="400"/>
+  </actuator>
+
+</mujoco>
