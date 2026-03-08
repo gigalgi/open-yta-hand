@@ -3,7 +3,7 @@
 **Underactuated anthropomorphic hand with integrated wrist — 7 DOF per finger, LSTM kinematics, impedance control, ~$8 per finger.**
 
 [![Thesis](https://img.shields.io/badge/Thesis-SKKU%202024-blue)](https://dcollection.skku.edu/srch/srchDetail/000000181091?localeParam=en)
-[![ICCAS 2024](https://img.shields.io/badge/Paper-ICCAS%202024-green)](https://iccas.org)
+[![ICCAS 2024](https://img.shields.io/badge/Paper-ICCAS%202024-green)](https://ieeexplore.ieee.org/document/10773068)
 [![Framework](https://img.shields.io/badge/Design%20Framework-monolithic--robotics-orange)](https://github.com/yourusername/monolithic-robotics)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey)](LICENSE)
 
@@ -408,7 +408,7 @@ python lstm/predict.py
 
 **ICCAS 2024**
 > *Design of a Modular Anthropomorphic Hand with Integrated Monolithic Compliant Fingers and Wrist Joint*
-> Gilberto Galvis Giraldo, Arpan Ghosh, Tae-Yong Kuc
+> Gilberto Galvis Giraldo, Arpan Ghosh, Tae-Yong Kuc[[paper]](https://ieeexplore.ieee.org/document/10773068)
 
 **Master's Thesis — SKKU 2024**
 > *Monolithic Robotics with Cognitive AI: A Compliant Mechanism-Based Anthropomorphic Arm Design for Semantic Autonomous Manipulation*
@@ -417,7 +417,7 @@ python lstm/predict.py
 
 **Technical Report — 2023**
 > *UMoBIC-Finger: A FACT-Based Compliant Revolute Joint for Monolithic Robotic Fingers*
-> [[monolithic-robotics repository]](https://github.com/yourusername/monolithic-robotics)
+> [[monolithic-robotics repository]](https://github.com/gigalgi/monolithic-robotics)
 
 ---
 
