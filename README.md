@@ -408,7 +408,7 @@ python lstm/predict.py
 
 **ICCAS 2024**
 > *Design of a Modular Anthropomorphic Hand with Integrated Monolithic Compliant Fingers and Wrist Joint*
-> Gilberto Galvis Giraldo, Arpan Ghosh, Tae-Yong Kuc[[paper]](https://ieeexplore.ieee.org/document/10773068)
+> Gilberto Galvis Giraldo, Arpan Ghosh, Tae-Yong Kuc. [[Paper]](https://ieeexplore.ieee.org/document/10773068)
 
 **Master's Thesis — SKKU 2024**
 > *Monolithic Robotics with Cognitive AI: A Compliant Mechanism-Based Anthropomorphic Arm Design for Semantic Autonomous Manipulation*
